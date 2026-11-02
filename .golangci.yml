@@ -11,6 +11,13 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - unconvert
+  settings:
+    errcheck:
+      # Failing to print to a terminal leaves nothing useful to do.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
 
 formatters:
   enable:
