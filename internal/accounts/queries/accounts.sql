@@ -1,4 +1,4 @@
 -- name: GetAccount :one
-SELECT id, kind, status, currency, owner_id, alias, system_code, metadata, created_at, updated_at
+SELECT id, type, code, currency, status, allow_negative, created_at
 FROM accounts
 WHERE id = $1;

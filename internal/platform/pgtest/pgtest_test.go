@@ -14,8 +14,8 @@ func TestNewAppliesMigrations(t *testing.T) {
 
 	got := publicTables(t, pool)
 	want := []string{
-		"accounts", "balances", "idempotency_keys", "journal_transactions",
-		"outbox_events", "postings", "schema_migrations", "transaction_status_history", "transfers",
+		"accounts", "balances", "currencies", "journal_transactions",
+		"outbox_events", "postings", "schema_migrations", "transaction_status_history",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("tables = %v, want %v", got, want)
@@ -52,7 +52,7 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	}
 }
 
-// Both subtests insert the same alias, which is unique. If they shared a
+// Both subtests insert the same currency, which is unique. If they shared a
 // database, one of them would fail.
 func TestNewIsolatesDatabases(t *testing.T) {
 	for _, name := range []string{"first", "second"} {
@@ -60,19 +60,17 @@ func TestNewIsolatesDatabases(t *testing.T) {
 			t.Parallel()
 			pool := New(t)
 
-			_, err := pool.Exec(t.Context(), `
-				INSERT INTO accounts (id, kind, currency, owner_id, alias)
-				VALUES (gen_random_uuid(), 'user', 'COP', gen_random_uuid(), 'same_alias')`)
+			_, err := pool.Exec(t.Context(), `INSERT INTO currencies (code, exponent) VALUES ('EUR', 2)`)
 			if err != nil {
 				t.Fatalf("insert: %v", err)
 			}
 
 			var count int
-			if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM accounts`).Scan(&count); err != nil {
+			if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM currencies WHERE code = 'EUR'`).Scan(&count); err != nil {
 				t.Fatal(err)
 			}
 			if count != 1 {
-				t.Errorf("accounts = %d, want 1", count)
+				t.Errorf("EUR rows = %d, want 1", count)
 			}
 		})
 	}

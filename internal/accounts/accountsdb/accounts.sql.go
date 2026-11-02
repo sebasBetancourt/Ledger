@@ -12,7 +12,7 @@ import (
 )
 
 const getAccount = `-- name: GetAccount :one
-SELECT id, kind, status, currency, owner_id, alias, system_code, metadata, created_at, updated_at
+SELECT id, type, code, currency, status, allow_negative, created_at
 FROM accounts
 WHERE id = $1
 `
@@ -22,15 +22,12 @@ func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
 	var i Account
 	err := row.Scan(
 		&i.ID,
-		&i.Kind,
-		&i.Status,
+		&i.Type,
+		&i.Code,
 		&i.Currency,
-		&i.OwnerID,
-		&i.Alias,
-		&i.SystemCode,
-		&i.Metadata,
+		&i.Status,
+		&i.AllowNegative,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }

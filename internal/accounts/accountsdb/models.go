@@ -12,89 +12,70 @@ import (
 )
 
 type Account struct {
-	ID         uuid.UUID
-	Kind       string
-	Status     string
-	Currency   string
-	OwnerID    uuid.NullUUID
-	Alias      pgtype.Text
-	SystemCode pgtype.Text
-	Metadata   []byte
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID            uuid.UUID
+	Type          string
+	Code          pgtype.Text
+	Currency      string
+	Status        string
+	AllowNegative bool
+	CreatedAt     time.Time
 }
 
 type Balance struct {
-	AccountID   uuid.UUID
-	AccountKind string
-	Available   int64
-	Locked      int64
-	Version     int64
-	LastSeq     int64
-	UpdatedAt   time.Time
+	AccountID     uuid.UUID
+	AllowNegative bool
+	Available     int64
+	Locked        int64
+	Version       int64
+	LastSeq       int64
+	UpdatedAt     time.Time
 }
 
-type IdempotencyKey struct {
-	ID                   uuid.UUID
-	ClientID             string
-	Key                  string
-	RequestHash          []byte
-	ResponseStatus       pgtype.Int4
-	ResponseBody         []byte
-	JournalTransactionID uuid.NullUUID
-	CreatedAt            time.Time
-	ExpiresAt            time.Time
+type Currency struct {
+	Code     string
+	Exponent int16
 }
 
 type JournalTransaction struct {
-	ID                    uuid.UUID
-	Reference             string
-	Origin                string
-	Status                string
-	ReversesTransactionID uuid.NullUUID
-	CorrelationID         uuid.UUID
-	Metadata              []byte
-	CreatedAt             time.Time
+	ID            uuid.UUID
+	Reference     string
+	Kind          string
+	Status        string
+	CorrelationID uuid.UUID
+	InitiatedBy   string
+	ExternalRef   pgtype.Text
+	Metadata      []byte
+	ReversesID    uuid.NullUUID
+	CreatedAt     time.Time
 }
 
 type OutboxEvent struct {
-	ID                   uuid.UUID
-	JournalTransactionID uuid.UUID
-	EventType            string
-	Payload              []byte
-	CreatedAt            time.Time
-	PublishedAt          pgtype.Timestamptz
+	ID            uuid.UUID
+	TransactionID uuid.UUID
+	EventType     string
+	Payload       []byte
+	CreatedAt     time.Time
+	PublishedAt   pgtype.Timestamptz
 }
 
 type Posting struct {
-	ID                   uuid.UUID
-	JournalTransactionID uuid.UUID
-	AccountID            uuid.UUID
-	Currency             string
-	Amount               int64
-	Seq                  int64
-	PrevSeq              pgtype.Int8
-	BalanceBefore        int64
-	BalanceAfter         int64
-	CreatedAt            time.Time
+	ID            uuid.UUID
+	TransactionID uuid.UUID
+	AccountID     uuid.UUID
+	Currency      string
+	Amount        int64
+	Seq           int64
+	PrevSeq       pgtype.Int8
+	BalanceBefore int64
+	BalanceAfter  int64
+	CreatedAt     time.Time
 }
 
 type TransactionStatusHistory struct {
-	ID                   int64
-	JournalTransactionID uuid.UUID
-	FromStatus           pgtype.Text
-	ToStatus             string
-	ChangedAt            time.Time
-}
-
-type Transfer struct {
-	ID                   uuid.UUID
-	JournalTransactionID uuid.UUID
-	ClientID             string
-	FromAccountID        uuid.UUID
-	ToAccountID          uuid.UUID
-	Currency             string
-	Amount               int64
-	FailureCode          pgtype.Text
-	CreatedAt            time.Time
+	ID            int64
+	TransactionID uuid.UUID
+	FromStatus    pgtype.Text
+	ToStatus      string
+	Reason        pgtype.Text
+	CreatedAt     time.Time
 }

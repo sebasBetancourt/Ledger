@@ -16,10 +16,9 @@ func TestGetAccount(t *testing.T) {
 	pool := pgtest.New(t)
 	queries := accountsdb.New(pool)
 
-	id, owner := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	id := uuid.Must(uuid.NewV7())
 	_, err := pool.Exec(t.Context(), `
-		INSERT INTO accounts (id, kind, currency, owner_id, alias)
-		VALUES ($1, 'user', 'COP', $2, 'ana')`, id, owner)
+		INSERT INTO accounts (id, type, currency) VALUES ($1, 'user', 'COP')`, id)
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -32,14 +31,11 @@ func TestGetAccount(t *testing.T) {
 	if got.ID != id {
 		t.Errorf("ID = %v, want %v", got.ID, id)
 	}
-	if !got.OwnerID.Valid || got.OwnerID.UUID != owner {
-		t.Errorf("OwnerID = %v, want %v", got.OwnerID, owner)
+	if got.Type != "user" || got.Status != "active" || got.Currency != "COP" {
+		t.Errorf("type, status, currency = %q, %q, %q, want user, active, COP", got.Type, got.Status, got.Currency)
 	}
-	if got.Kind != "user" || got.Status != "active" || got.Currency != "COP" {
-		t.Errorf("kind, status, currency = %q, %q, %q, want user, active, COP", got.Kind, got.Status, got.Currency)
-	}
-	if got.Alias.String != "ana" {
-		t.Errorf("Alias = %q, want ana", got.Alias.String)
+	if got.Code.Valid || got.AllowNegative {
+		t.Errorf("code, allow_negative = %v, %v, want NULL, false", got.Code, got.AllowNegative)
 	}
 	if time.Since(got.CreatedAt) > time.Minute || got.CreatedAt.IsZero() {
 		t.Errorf("CreatedAt = %v, want about now", got.CreatedAt)
