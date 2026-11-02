@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/sebasBetancourt/Ledger/internal/ledger/ledgerdb"
-	"github.com/sebasBetancourt/Ledger/internal/platform/pgtest"
 )
 
 // The generated Queries must satisfy the generated interface.
@@ -26,7 +25,7 @@ var _ ledgerdb.Querier = (*ledgerdb.Queries)(nil)
 var cashInCOP = uuid.MustParse("01900000-0000-7000-8000-000000000001")
 
 func TestCreateAndGetAccounts(t *testing.T) {
-	q := ledgerdb.New(pgtest.New(t))
+	q := ledgerdb.New(newDB(t))
 	first, second := newWallet(t, q), newWallet(t, q)
 
 	got, err := q.GetAccountsByIDs(t.Context(), []uuid.UUID{second, first})
@@ -53,7 +52,7 @@ func TestCreateAndGetAccounts(t *testing.T) {
 }
 
 func TestGetSystemAccountByCode(t *testing.T) {
-	q := ledgerdb.New(pgtest.New(t))
+	q := ledgerdb.New(newDB(t))
 
 	got, err := q.GetSystemAccountByCode(t.Context(), ledgerdb.GetSystemAccountByCodeParams{
 		Code: "cash_in_clearing", Currency: "COP",
@@ -76,7 +75,7 @@ func TestGetSystemAccountByCode(t *testing.T) {
 // Rows are inserted in descending ID order, so the table's physical order is
 // the opposite of the expected one. Without ORDER BY this test fails.
 func TestLockBalancesReturnsAccountOrder(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	q := ledgerdb.New(pool)
 
 	want := []uuid.UUID{uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())}
@@ -105,7 +104,7 @@ func TestLockBalancesReturnsAccountOrder(t *testing.T) {
 // would not catch a missing ORDER BY, because one query happens to lock in the
 // table's physical order; TestLockBalancesReturnsAccountOrder does.
 func TestLockBalancesCrossedNeverDeadlocks(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	q := ledgerdb.New(pool)
 	a, b := newWallet(t, q), newWallet(t, q)
 
@@ -137,7 +136,7 @@ func TestLockBalancesCrossedNeverDeadlocks(t *testing.T) {
 // order the request names them. Crossed transfers then wait on each other
 // until PostgreSQL kills one with a deadlock error.
 func TestLockingOneByOneDeadlocks(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	q := ledgerdb.New(pool)
 	a, b := newWallet(t, q), newWallet(t, q)
 
@@ -181,7 +180,7 @@ func TestLockingOneByOneDeadlocks(t *testing.T) {
 }
 
 func TestTransferWithQueries(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	q := ledgerdb.New(pool)
 	ana := newWallet(t, q)
 
@@ -197,7 +196,7 @@ func TestTransferWithQueries(t *testing.T) {
 }
 
 func TestUpdateTransactionStatusIsCompareAndSet(t *testing.T) {
-	q := ledgerdb.New(pgtest.New(t))
+	q := ledgerdb.New(newDB(t))
 	id := insertTransaction(t, q)
 
 	rows, err := q.UpdateTransactionStatus(t.Context(), ledgerdb.UpdateTransactionStatusParams{
@@ -212,7 +211,7 @@ func TestUpdateTransactionStatusIsCompareAndSet(t *testing.T) {
 }
 
 func TestSetStatusReason(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	tx := begin(t, pool)
 	q := ledgerdb.New(pool).WithTx(tx)
 
@@ -239,7 +238,7 @@ func TestSetStatusReason(t *testing.T) {
 }
 
 func TestListPostingsByAccountPaginatesBySeq(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	q := ledgerdb.New(pool)
 	ana := newWallet(t, q)
 	for range 5 {
@@ -273,7 +272,7 @@ func TestListPostingsByAccountPaginatesBySeq(t *testing.T) {
 }
 
 func TestInvariantReports(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	q := ledgerdb.New(pool)
 	ana, beto := newWallet(t, q), newWallet(t, q)
 	move(t, pool, cashInCOP, ana, 10_000_000)

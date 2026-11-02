@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
+	pgregory.net/rapid v1.3.0
 )
 
 require (

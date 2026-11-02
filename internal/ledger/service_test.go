@@ -13,11 +13,10 @@ import (
 
 	"github.com/sebasBetancourt/Ledger/internal/ledger"
 	"github.com/sebasBetancourt/Ledger/internal/ledger/ledgerdb"
-	"github.com/sebasBetancourt/Ledger/internal/platform/pgtest"
 )
 
 func TestPostTransfer(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	ids := &sequenceIDs{}
 	svc := ledger.NewService(pool, ids)
 	q := ledgerdb.New(pool)
@@ -71,7 +70,7 @@ func TestPostTransfer(t *testing.T) {
 }
 
 func TestPostInvalidRequestWritesNothing(t *testing.T) {
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	svc := ledger.NewService(pool, ledger.UUIDv7{})
 
 	_, err := svc.Post(t.Context(), request("bad", ledger.KindTransfer, uuid.New(), -100, uuid.New(), 99))
@@ -250,7 +249,7 @@ func TestPostCrossedTransfersNeverDeadlock(t *testing.T) {
 func funded(t *testing.T, amount ledger.Amount) (*pgxpool.Pool, *ledger.Service, uuid.UUID, uuid.UUID) {
 	t.Helper()
 
-	pool := pgtest.New(t)
+	pool := newDB(t)
 	svc := ledger.NewService(pool, ledger.UUIDv7{})
 	q := ledgerdb.New(pool)
 	ana, beto := newWallet(t, q), newWallet(t, q)
