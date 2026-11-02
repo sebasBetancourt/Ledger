@@ -73,6 +73,27 @@ func (q *Queries) CreateBalance(ctx context.Context, arg CreateBalanceParams) (B
 	return i, err
 }
 
+const getAccount = `-- name: GetAccount :one
+SELECT id, type, code, currency, status, allow_negative, created_at
+FROM accounts
+WHERE id = $1
+`
+
+func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error) {
+	row := q.db.QueryRow(ctx, getAccount, id)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.Type,
+		&i.Code,
+		&i.Currency,
+		&i.Status,
+		&i.AllowNegative,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getAccountsByIDs = `-- name: GetAccountsByIDs :many
 SELECT id, type, code, currency, status, allow_negative, created_at
 FROM accounts

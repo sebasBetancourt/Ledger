@@ -11,6 +11,254 @@ import (
 	"github.com/google/uuid"
 )
 
+const balanceMismatches = `-- name: BalanceMismatches :many
+SELECT a.id AS account_id,
+       (b.account_id IS NOT NULL)::boolean AS has_balance,
+       coalesce(b.available + b.locked, 0)::bigint AS projected_total,
+       coalesce(b.last_seq, 0)::bigint AS projected_seq,
+       coalesce(l.total, 0)::bigint AS ledger_total,
+       coalesce(l.last_seq, 0)::bigint AS ledger_seq
+FROM accounts a
+LEFT JOIN balances b ON b.account_id = a.id
+LEFT JOIN (
+    SELECT account_id, sum(amount) AS total, max(seq) AS last_seq
+    FROM postings
+    GROUP BY account_id
+) l ON l.account_id = a.id
+WHERE b.account_id IS NULL
+   OR b.available + b.locked <> coalesce(l.total, 0)
+   OR b.last_seq <> coalesce(l.last_seq, 0)
+ORDER BY a.id
+`
+
+type BalanceMismatchesRow struct {
+	AccountID      uuid.UUID
+	HasBalance     bool
+	ProjectedTotal int64
+	ProjectedSeq   int64
+	LedgerTotal    int64
+	LedgerSeq      int64
+}
+
+// Invariant 3: every balance equals its account's postings. has_balance is
+// false for an account that lost its balance row.
+func (q *Queries) BalanceMismatches(ctx context.Context) ([]BalanceMismatchesRow, error) {
+	rows, err := q.db.Query(ctx, balanceMismatches)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BalanceMismatchesRow
+	for rows.Next() {
+		var i BalanceMismatchesRow
+		if err := rows.Scan(
+			&i.AccountID,
+			&i.HasBalance,
+			&i.ProjectedTotal,
+			&i.ProjectedSeq,
+			&i.LedgerTotal,
+			&i.LedgerSeq,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const brokenChains = `-- name: BrokenChains :many
+SELECT account_id, seq
+FROM (
+    SELECT account_id, seq, amount, balance_before, balance_after,
+           lag(seq) OVER w AS previous_seq,
+           lag(balance_after) OVER w AS previous_after
+    FROM postings
+    WINDOW w AS (PARTITION BY account_id ORDER BY seq)
+) chain
+WHERE balance_after <> balance_before + amount
+   OR (previous_seq IS NULL AND (seq <> 1 OR balance_before <> 0))
+   OR (previous_seq IS NOT NULL AND (seq <> previous_seq + 1 OR balance_before <> previous_after))
+ORDER BY account_id, seq
+`
+
+type BrokenChainsRow struct {
+	AccountID uuid.UUID
+	Seq       int64
+}
+
+// Invariant 4: each posting starts where the account's previous one ended,
+// seq has no gaps, and the arithmetic holds.
+func (q *Queries) BrokenChains(ctx context.Context) ([]BrokenChainsRow, error) {
+	rows, err := q.db.Query(ctx, brokenChains)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BrokenChainsRow
+	for rows.Next() {
+		var i BrokenChainsRow
+		if err := rows.Scan(&i.AccountID, &i.Seq); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const duplicateEffects = `-- name: DuplicateEffects :many
+SELECT 'reference'::text AS field, reference AS value, count(*)::bigint AS uses
+FROM journal_transactions
+GROUP BY reference
+HAVING count(*) > 1
+UNION ALL
+SELECT 'reverses_id'::text, reverses_id::text, count(*)::bigint
+FROM journal_transactions
+WHERE reverses_id IS NOT NULL
+GROUP BY reverses_id
+HAVING count(*) > 1
+`
+
+type DuplicateEffectsRow struct {
+	Field string
+	Value string
+	Uses  int64
+}
+
+// Invariant 6: a reference, or a reversal target, used more than once.
+func (q *Queries) DuplicateEffects(ctx context.Context) ([]DuplicateEffectsRow, error) {
+	rows, err := q.db.Query(ctx, duplicateEffects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DuplicateEffectsRow
+	for rows.Next() {
+		var i DuplicateEffectsRow
+		if err := rows.Scan(&i.Field, &i.Value, &i.Uses); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ledgerTotals = `-- name: LedgerTotals :many
+SELECT a.id AS account_id,
+       coalesce(sum(p.amount), 0)::bigint AS total,
+       coalesce(max(p.seq), 0)::bigint AS last_seq
+FROM accounts a
+LEFT JOIN postings p ON p.account_id = a.id
+WHERE a.id = ANY($1::uuid[])
+GROUP BY a.id
+ORDER BY a.id
+`
+
+type LedgerTotalsRow struct {
+	AccountID uuid.UUID
+	Total     int64
+	LastSeq   int64
+}
+
+// What each account's total and last seq should be, from its postings alone.
+func (q *Queries) LedgerTotals(ctx context.Context, accountIds []uuid.UUID) ([]LedgerTotalsRow, error) {
+	rows, err := q.db.Query(ctx, ledgerTotals, accountIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LedgerTotalsRow
+	for rows.Next() {
+		var i LedgerTotalsRow
+		if err := rows.Scan(&i.AccountID, &i.Total, &i.LastSeq); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const negativeBalances = `-- name: NegativeBalances :many
+SELECT account_id, available, locked
+FROM balances
+WHERE (NOT allow_negative AND available < 0) OR locked < 0
+ORDER BY account_id
+`
+
+type NegativeBalancesRow struct {
+	AccountID uuid.UUID
+	Available int64
+	Locked    int64
+}
+
+// Invariant 5: no customer account below zero, and locked never negative.
+func (q *Queries) NegativeBalances(ctx context.Context) ([]NegativeBalancesRow, error) {
+	rows, err := q.db.Query(ctx, negativeBalances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NegativeBalancesRow
+	for rows.Next() {
+		var i NegativeBalancesRow
+		if err := rows.Scan(&i.AccountID, &i.Available, &i.Locked); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const outboxMismatches = `-- name: OutboxMismatches :many
+SELECT t.id, count(e.id)::bigint AS events
+FROM journal_transactions t
+LEFT JOIN outbox_events e ON e.transaction_id = t.id
+WHERE t.status IN ('completed', 'reversed')
+GROUP BY t.id
+HAVING count(e.id) <> 1
+ORDER BY t.id
+`
+
+type OutboxMismatchesRow struct {
+	ID     uuid.UUID
+	Events int64
+}
+
+// Invariant 7: every confirmed transaction has exactly one outbox event.
+func (q *Queries) OutboxMismatches(ctx context.Context) ([]OutboxMismatchesRow, error) {
+	rows, err := q.db.Query(ctx, outboxMismatches)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OutboxMismatchesRow
+	for rows.Next() {
+		var i OutboxMismatchesRow
+		if err := rows.Scan(&i.ID, &i.Events); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recomputeBalances = `-- name: RecomputeBalances :many
 SELECT a.id AS account_id,
        coalesce(sum(p.amount), 0)::bigint AS total,
@@ -72,6 +320,49 @@ func (q *Queries) SumPostingsByCurrency(ctx context.Context) ([]SumPostingsByCur
 	for rows.Next() {
 		var i SumPostingsByCurrencyRow
 		if err := rows.Scan(&i.Currency, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const unbalancedTransactions = `-- name: UnbalancedTransactions :many
+SELECT t.id, t.status
+FROM journal_transactions t
+WHERE (t.status IN ('completed', 'reversed') AND (
+          (SELECT count(*) FROM postings p WHERE p.transaction_id = t.id) < 2
+          OR EXISTS (
+              SELECT 1 FROM postings p
+              WHERE p.transaction_id = t.id
+              GROUP BY p.currency
+              HAVING sum(p.amount) <> 0
+          )))
+   OR (t.status NOT IN ('completed', 'reversed')
+       AND EXISTS (SELECT 1 FROM postings p WHERE p.transaction_id = t.id))
+ORDER BY t.id
+`
+
+type UnbalancedTransactionsRow struct {
+	ID     uuid.UUID
+	Status string
+}
+
+// Invariant 1: confirmed transactions need 2+ postings summing to 0 per
+// currency; any other status must have none.
+func (q *Queries) UnbalancedTransactions(ctx context.Context) ([]UnbalancedTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, unbalancedTransactions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UnbalancedTransactionsRow
+	for rows.Next() {
+		var i UnbalancedTransactionsRow
+		if err := rows.Scan(&i.ID, &i.Status); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

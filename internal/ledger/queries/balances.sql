@@ -18,3 +18,10 @@ SET available  = @available,
     updated_at = now()
 WHERE account_id = @account_id
 RETURNING *;
+
+-- name: GetBalance :one
+-- A plain read, without locking: for showing a balance, never for moving money.
+SELECT b.account_id, a.currency, b.available, b.locked, b.version, b.updated_at
+FROM balances b
+JOIN accounts a ON a.id = b.account_id
+WHERE b.account_id = @account_id;

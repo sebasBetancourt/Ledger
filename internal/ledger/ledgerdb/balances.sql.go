@@ -7,9 +7,41 @@ package ledgerdb
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+const getBalance = `-- name: GetBalance :one
+SELECT b.account_id, a.currency, b.available, b.locked, b.version, b.updated_at
+FROM balances b
+JOIN accounts a ON a.id = b.account_id
+WHERE b.account_id = $1
+`
+
+type GetBalanceRow struct {
+	AccountID uuid.UUID
+	Currency  string
+	Available int64
+	Locked    int64
+	Version   int64
+	UpdatedAt time.Time
+}
+
+// A plain read, without locking: for showing a balance, never for moving money.
+func (q *Queries) GetBalance(ctx context.Context, accountID uuid.UUID) (GetBalanceRow, error) {
+	row := q.db.QueryRow(ctx, getBalance, accountID)
+	var i GetBalanceRow
+	err := row.Scan(
+		&i.AccountID,
+		&i.Currency,
+		&i.Available,
+		&i.Locked,
+		&i.Version,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
 
 const lockBalances = `-- name: LockBalances :many
 SELECT account_id, allow_negative, available, locked, version, last_seq, updated_at

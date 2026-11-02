@@ -21,3 +21,8 @@ SELECT *
 FROM accounts
 WHERE code = @code::text
   AND currency = @currency;
+
+-- name: GetAccount :one
+SELECT *
+FROM accounts
+WHERE id = @id;

@@ -11,10 +11,21 @@ import (
 )
 
 type Querier interface {
+	// Invariant 3: every balance equals its account's postings. has_balance is
+	// false for an account that lost its balance row.
+	BalanceMismatches(ctx context.Context) ([]BalanceMismatchesRow, error)
+	// Invariant 4: each posting starts where the account's previous one ended,
+	// seq has no gaps, and the arithmetic holds.
+	BrokenChains(ctx context.Context) ([]BrokenChainsRow, error)
 	// The account needs its balance row (CreateBalance) in the same transaction.
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
 	CreateBalance(ctx context.Context, arg CreateBalanceParams) (Balance, error)
+	// Invariant 6: a reference, or a reversal target, used more than once.
+	DuplicateEffects(ctx context.Context) ([]DuplicateEffectsRow, error)
+	GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
 	GetAccountsByIDs(ctx context.Context, ids []uuid.UUID) ([]Account, error)
+	// A plain read, without locking: for showing a balance, never for moving money.
+	GetBalance(ctx context.Context, accountID uuid.UUID) (GetBalanceRow, error)
 	// Look system accounts up by code and currency, never by their fixed IDs.
 	GetSystemAccountByCode(ctx context.Context, arg GetSystemAccountByCodeParams) (Account, error)
 	// Required for every completed transaction (outbox_required).
@@ -22,6 +33,8 @@ type Querier interface {
 	InsertPosting(ctx context.Context, arg InsertPostingParams) (Posting, error)
 	// New transactions always start as 'created' (journal_status_guard).
 	InsertTransaction(ctx context.Context, arg InsertTransactionParams) (JournalTransaction, error)
+	// What each account's total and last seq should be, from its postings alone.
+	LedgerTotals(ctx context.Context, accountIds []uuid.UUID) ([]LedgerTotalsRow, error)
 	// Newest first. Pass the last seq of the previous page as before_seq, or NULL
 	// for the first page. Pages by seq, not created_at: created_at is the start
 	// time of a transaction that may commit later, so a date cursor can skip rows.
@@ -30,6 +43,10 @@ type Querier interface {
 	// transaction take its locks in the same order, so crossed transfers
 	// (A→B and B→A) queue instead of deadlocking.
 	LockBalances(ctx context.Context, accountIds []uuid.UUID) ([]Balance, error)
+	// Invariant 5: no customer account below zero, and locked never negative.
+	NegativeBalances(ctx context.Context) ([]NegativeBalancesRow, error)
+	// Invariant 7: every confirmed transaction has exactly one outbox event.
+	OutboxMismatches(ctx context.Context) ([]OutboxMismatchesRow, error)
 	// What every balance should be, from the postings alone. rebuild-balances and
 	// invariant checks compare it with the balances table.
 	RecomputeBalances(ctx context.Context) ([]RecomputeBalancesRow, error)
@@ -38,6 +55,9 @@ type Querier interface {
 	SetStatusReason(ctx context.Context, reason string) error
 	// Invariant 2: every total must be 0. sum(bigint) returns numeric, hence the cast.
 	SumPostingsByCurrency(ctx context.Context) ([]SumPostingsByCurrencyRow, error)
+	// Invariant 1: confirmed transactions need 2+ postings summing to 0 per
+	// currency; any other status must have none.
+	UnbalancedTransactions(ctx context.Context) ([]UnbalancedTransactionsRow, error)
 	// Stores values computed under LockBalances. version counts changes.
 	UpdateBalance(ctx context.Context, arg UpdateBalanceParams) (Balance, error)
 	// Compare-and-set: changes the status only if it is still from_status. Zero
