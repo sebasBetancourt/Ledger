@@ -1,0 +1,21 @@
+version: "2"
+
+# One entry per module, so each owns its queries and generated package.
+# sqlc reads the schema from migrations/ and skips the .down.sql files.
+sql:
+  - engine: postgresql
+    schema: migrations
+    queries: internal/accounts/queries
+    gen:
+      go:
+        package: accountsdb
+        out: internal/accounts/accountsdb
+        sql_package: pgx/v5
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type: github.com/google/uuid.NullUUID
+          - db_type: timestamptz
+            go_type: time.Time
