@@ -186,5 +186,5 @@ Append-only log of every status change, written by `journal_status_audit`. `reas
 
 ## Known limits
 
-- **Database role:** triggers only protect against the application if it does not own the tables, because an owner can disable them. The application role arrives before Go code writes money.
+- **Database role:** triggers only protect against the application if it does not own the tables, because an owner can disable them. The application role is still pending: until it exists, every connection is the owner, so it must land before the API serves traffic in phase 2.
 - **Reversal content:** the schema guarantees a reversal is balanced and happens once, but not that it mirrors the original. That rule lives in Go and needs its own test.

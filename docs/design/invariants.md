@@ -22,5 +22,5 @@ The rules that must hold at all times, whatever fails. If something is only guar
 
 Two rules protect these guarantees from outside the database:
 
-- The application must not connect as the table owner, because an owner can disable triggers. That role arrives before Go code writes money.
+- The application must not connect as the table owner, because an owner can disable triggers. That role is still pending: until it exists, every connection is the owner, so it must land before the API serves traffic in phase 2.
 - Holds arrive in phase 3, adding one rule to invariant 3: `locked` must equal the sum of open holds.
