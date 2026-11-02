@@ -9,6 +9,10 @@ GOLANGCI_LINT_VERSION := v2.15.0
 
 BIN := $(CURDIR)/bin
 
+# sqlc and golangci-lint need a newer Go than the project. GOTOOLCHAIN=auto lets
+# go install download it for the build only; CI sets GOTOOLCHAIN=local otherwise.
+GO_INSTALL := GOTOOLCHAIN=auto GOBIN=$(BIN) go install
+
 .PHONY: tools up down migrate-up migrate-down sqlc test lint check-database-url
 
 tools: bin/migrate bin/sqlc bin/golangci-lint
@@ -16,13 +20,13 @@ tools: bin/migrate bin/sqlc bin/golangci-lint
 # The postgres tag compiles the driver into migrate; without it, migrate
 # cannot open postgres:// URLs.
 bin/migrate:
-	GOBIN=$(BIN) go install -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
+	$(GO_INSTALL) -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
 
 bin/sqlc:
-	GOBIN=$(BIN) go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+	$(GO_INSTALL) github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
 bin/golangci-lint:
-	GOBIN=$(BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	$(GO_INSTALL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 up:
 	docker compose up -d --wait
