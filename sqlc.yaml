@@ -5,17 +5,31 @@ version: "2"
 sql:
   - engine: postgresql
     schema: migrations
-    queries: internal/accounts/queries
+    queries: internal/ledger/queries
     gen:
       go:
-        package: accountsdb
-        out: internal/accounts/accountsdb
+        package: ledgerdb
+        out: internal/ledger/ledgerdb
         sql_package: pgx/v5
+        # Querier lists every query, so callers can depend on an interface.
+        emit_interface: true
+        # Nullable columns become *T: nil means "no value".
+        emit_pointers_for_null_types: true
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID
           - db_type: uuid
             nullable: true
-            go_type: github.com/google/uuid.NullUUID
+            go_type:
+              import: github.com/google/uuid
+              type: UUID
+              pointer: true
+          - db_type: jsonb
+            go_type: encoding/json.RawMessage
           - db_type: timestamptz
             go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true

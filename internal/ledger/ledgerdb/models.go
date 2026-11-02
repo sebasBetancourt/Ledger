@@ -2,19 +2,19 @@
 // versions:
 //   sqlc v1.31.1
 
-package accountsdb
+package ledgerdb
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Account struct {
 	ID            uuid.UUID
 	Type          string
-	Code          pgtype.Text
+	Code          *string
 	Currency      string
 	Status        string
 	AllowNegative bool
@@ -43,9 +43,9 @@ type JournalTransaction struct {
 	Status        string
 	CorrelationID uuid.UUID
 	InitiatedBy   string
-	ExternalRef   pgtype.Text
-	Metadata      []byte
-	ReversesID    uuid.NullUUID
+	ExternalRef   *string
+	Metadata      json.RawMessage
+	ReversesID    *uuid.UUID
 	CreatedAt     time.Time
 }
 
@@ -53,9 +53,9 @@ type OutboxEvent struct {
 	ID            uuid.UUID
 	TransactionID uuid.UUID
 	EventType     string
-	Payload       []byte
+	Payload       json.RawMessage
 	CreatedAt     time.Time
-	PublishedAt   pgtype.Timestamptz
+	PublishedAt   *time.Time
 }
 
 type Posting struct {
@@ -65,7 +65,7 @@ type Posting struct {
 	Currency      string
 	Amount        int64
 	Seq           int64
-	PrevSeq       pgtype.Int8
+	PrevSeq       *int64
 	BalanceBefore int64
 	BalanceAfter  int64
 	CreatedAt     time.Time
@@ -74,8 +74,8 @@ type Posting struct {
 type TransactionStatusHistory struct {
 	ID            int64
 	TransactionID uuid.UUID
-	FromStatus    pgtype.Text
+	FromStatus    *string
 	ToStatus      string
-	Reason        pgtype.Text
+	Reason        *string
 	CreatedAt     time.Time
 }
